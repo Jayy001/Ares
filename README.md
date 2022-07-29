@@ -5,7 +5,7 @@
 <a href="http://discord.skerritt.blog">Discord</a> | 
 <a href="https://broadleaf-angora-7db.notion.site/Ciphey2-32d5eea5d38b40c5b95a9442b4425710">Documentation </a>
  ⬅️
-</p>
+</p> pleasing the terminal
 
 <p align="center">
 <h1>Project Ares</h1>
