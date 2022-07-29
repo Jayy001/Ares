@@ -1,5 +1,5 @@
 [package]
-name = "project_ares"
+name = "project_ares_S"
 version = "0.1.0"
 edition = "2021"
 description = "Automated decoding tool, Ciphey but in Rust"
