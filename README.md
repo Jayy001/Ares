@@ -9,7 +9,7 @@
 
 <p align="center">
 <h1>Project Ares</h1>
-</p>
+</p>loldwamlmao
 
 Ares is the next generation of decoding tools, built by the same people that brought you [Ciphey](https://github.com/ciphey/ciphey).
 
