@@ -1,5 +1,5 @@
  
- <p align="center">
+ <p align="cdwaenter">
  <br><br>
 ➡️
 <a href="http://discord.skerritt.blog">Discord</a> | 
