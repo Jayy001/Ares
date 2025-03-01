@@ -3,8 +3,24 @@
 //! Click here to find out more:
 //! https://broadleaf-angora-7db.notion.site/Search-Nodes-Edges-What-should-they-look-like-b74c43ca7ac341a1a5cfdbeb84a7eef0
 
-use crate::checkers;
-use crate::filtration_system::filter_and_get_decoders;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::thread;
+
+use crossbeam::channel::bounded;
+use log::debug;
+
+use crate::checkers::athena::Athena;
+use crate::checkers::checker_type::{Check, Checker};
+use crate::checkers::CheckerTypes;
+use crate::config::get_config;
+use crate::filtration_system::{filter_and_get_decoders, MyResults};
+use crate::{timer, DecoderResult};
+/// This module provides access to the A* search algorithm
+/// which uses a heuristic to prioritize decoders.
+mod astar;
+/// This module provides access to the breadth first search
+/// which searches for the plaintext.
 mod bfs;
 
 /*pub struct Tree <'a> {
@@ -20,32 +36,62 @@ mod bfs;
 /// We need to loop through these and determine:
 /// 1. Did we reach our exit condition?
 /// 2. If not, create new nodes out of them and add them to the queue.
-/// We can return an Option? An Enum? And then match on that
-/// So if we return CrackSuccess we return
-/// Else if we return an array, we add it to the children and go again.
-pub fn search_for_plaintext(input: &str) -> Option<String> {
-    // Change this to select which search algorithm we want to use.
-    bfs::bfs(input)
+///
+///    We can return an Option? An Enum? And then match on that
+///    So if we return CrackSuccess we return
+///    Else if we return an array, we add it to the children and go again.
+pub fn search_for_plaintext(input: String) -> Option<DecoderResult> {
+    let timeout = get_config().timeout;
+    let timer = timer::start(timeout);
+
+    let (result_sender, result_recv) = bounded::<Option<DecoderResult>>(1);
+    // For stopping the thread
+    let stop = Arc::new(AtomicBool::new(false));
+    let s = stop.clone();
+    // Use A* search algorithm instead of BFS
+    let handle = thread::spawn(move || astar::astar(input, result_sender, s));
+
+    loop {
+        if let Ok(res) = result_recv.try_recv() {
+            debug!("Found exit result: {:?}", res);
+            handle.join().unwrap();
+            return res;
+        }
+
+        if timer.try_recv().is_ok() {
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+            debug!("Ares has failed to decode");
+            // this would wait for whole iteration to finish!
+            // handle.join().unwrap();
+            return None;
+        }
+    }
 }
 
-// Performs the decodings by getting all of the decoders
-// and calling `.run` which in turn loops through them and calls
-// `.crack()`.
-fn perform_decoding(text: &str) -> Vec<Option<String>> {
-    let decoders = filter_and_get_decoders();
-    decoders.run(text)
-}
-
-// https://github.com/bee-san/Ares/pull/14/files#diff-b8829c7e292562666c7fa5934de7b478c4a5de46d92e42c46215ac4d9ff89db2R37
-fn exit_condition(input: &str) -> bool {
-    // use mod.rs from checkers module
-    // call check(input)
-    checkers::check(input)
+/// Performs the decodings by getting all of the decoders
+/// and calling `.run` which in turn loops through them and calls
+/// `.crack()`.
+#[allow(dead_code)]
+fn perform_decoding(text: &DecoderResult) -> MyResults {
+    let decoders = filter_and_get_decoders(text);
+    let athena_checker = Checker::<Athena>::new();
+    let checker = CheckerTypes::CheckAthena(athena_checker);
+    decoders.run(&text.text[0], checker)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // https://github.com/bee-san/Ares/pull/14/files#diff-b8829c7e292562666c7fa5934de7b478c4a5de46d92e42c46215ac4d9ff89db2R37
+    // Only used for tests!
+    fn exit_condition(input: &str) -> bool {
+        // use Athena Checker from checkers module
+        // call check(input)
+        let athena_checker = Checker::<Athena>::new();
+        let checker = CheckerTypes::CheckAthena(athena_checker);
+        checker.check(input).is_identified
+    }
 
     #[test]
     fn exit_condition_succeeds() {
@@ -60,15 +106,21 @@ mod tests {
 
     #[test]
     fn perform_decoding_succeeds() {
-        let result = perform_decoding("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbQ==");
-        assert!(!result.is_empty());
-        assert!(result.get(0).is_some());
+        let dc = DecoderResult::_new("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbQ==");
+        let result = perform_decoding(&dc);
+        assert!(
+            result
+                ._break_value()
+                .expect("expected successful value, none found")
+                .success
+        );
         //TODO assert that the plaintext is correct by looping over the vector
     }
     #[test]
     fn perform_decoding_succeeds_empty_string() {
         // Some decoders like base64 return even when the string is empty.
-        let result = perform_decoding("");
-        assert!(!result.is_empty());
+        let dc = DecoderResult::_new("");
+        let result = perform_decoding(&dc);
+        assert!(result._break_value().is_none());
     }
 }

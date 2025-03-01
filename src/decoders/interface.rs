@@ -1,31 +1,42 @@
-///! The Interface defines what the struct for each decoder looks like
+use crate::checkers::CheckerTypes;
+
+use super::crack_results::CrackResult;
+
+/// The Interface defines what the struct for each decoder looks like
 //TODO: rename this file
 pub struct Decoder<Type> {
+    /// The English name of the decoder.
     pub name: &'static str,
     /// A description, you can take the first line from Wikipedia
     /// Sometimes our decoders do not exist on Wikipedia so we write our own.
     pub description: &'static str,
     /// Wikipedia Link
     pub link: &'static str,
+    /// The tags it has. See other decoders. Think of it as a "category"
+    /// This is used to filter decoders.
+    /// For example, if you want to filter decoders that are "base64"
+    /// you would use the tag "base64" or "base".
+    /// You can also add tags like "online" to filter decoders that are online.
     pub tags: Vec<&'static str>,
-    /// We get expectedRuntime this by bench marking the code
-    pub expected_runtime: f32,
     /// We get popularity by eye-balling it or using the API's data
     pub popularity: f32,
-    /// Expected success is calculated during cracking
-    /// Generally this can be ignored and set to 1.0
-    pub expected_success: f32,
-    /// failure_runtime is the absolute worst case
-    /// Expected is how long we expect, if it fails completely
-    /// This is how long it'll take to fail.
-    pub failure_runtime: f32,
-    // normalised_entropy is the range of entropy for this
-    // So base64's normalised entropy might be between 2.5 and 3
-    // This allows us to decide whether it's worth decoding
-    // If current text has entropy 9, it's unlikey to be base64
-    pub normalised_entropy: Vec<f32>,
-    // we don't use the Type, so we use PhantomData to mark it!
+    /// we don't use the Type, so we use PhantomData to mark it!
     pub phantom: std::marker::PhantomData<Type>,
+}
+
+/// The default implementation for a decoder
+pub struct DefaultDecoder;
+impl Default for Decoder<DefaultDecoder> {
+    fn default() -> Decoder<DefaultDecoder> {
+        Decoder {
+            name: "Default decoder",
+            description: "N/A",
+            link: "N/A",
+            tags: vec!["N/A"],
+            popularity: 0.0,
+            phantom: std::marker::PhantomData,
+        }
+    }
 }
 
 /// All decoders will share the same Crack trait
@@ -33,10 +44,16 @@ pub struct Decoder<Type> {
 /// Running `.crack()` on each of them.
 /// Relevant docs: https://docs.rs/crack/0.3.0/crack/trait.Crack.html
 pub trait Crack {
+    /// This function generates a new crack trait
     fn new() -> Self
     where
         Self: Sized;
-    fn crack(&self, text: &str) -> Option<String>;
+    /// Crack is the function that actually does the decoding
+    fn crack(&self, text: &str, checker: &CheckerTypes) -> CrackResult;
+    /// Get all tags for the current decoder
+    fn get_tags(&self) -> &Vec<&str>;
+    /// Get the nam of the current decoder
+    fn get_name(&self) -> &str;
 }
 
 /// Returns a boolean of True if the string is successfully changed
